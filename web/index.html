@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HPLC Standard Match Explorer</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="backdrop"></div>
+    <main class="shell">
+      <header class="hero" aria-label="Project header">
+        <div class="badge">HPLC Reader</div>
+        <h1>HPLC Standard Match Explorer</h1>
+        <p class="lead">
+          Upload multiple TSV files and a standard JSON. The app builds stddf,
+          lets you download it, and visualizes the matched peaks.
+        </p>
+        <div class="hero-meta">
+          <span>Retention time column: 3rd column</span>
+          <span>Signal column: last column</span>
+          <span>Auto expansion: +10% per step</span>
+        </div>
+      </header>
+
+      <section class="panel panel-compact" aria-label="Inputs">
+        <div class="panel-head">
+          <h2>Inputs</h2>
+          <p>Provide the HPLC TSV files and the standard JSON dictionary.</p>
+        </div>
+        <div class="panel-grid">
+          <label class="field">
+            <span>TSV files (multiple)</span>
+            <input id="tsvFiles" type="file" multiple accept=".tsv,text/tab-separated-values" />
+          </label>
+          <label class="field">
+            <span>Standard JSON</span>
+            <input id="jsonFile" type="file" accept=".json,application/json" />
+          </label>
+          <label class="field">
+            <span>Retention threshold (rt_thr)</span>
+            <input id="rtThr" type="number" min="0" step="0.01" value="0.1" />
+          </label>
+          <div class="field action-field">
+            <span>Process</span>
+            <button id="processBtn" class="primary">Generate stddf</button>
+          </div>
+        </div>
+        <div class="status" id="status" role="status"></div>
+      </section>
+
+      <section class="panel" id="results" aria-label="Results" hidden>
+        <div class="panel-head">
+          <h2>Results</h2>
+          <p>stddf is generated per standard across all files.</p>
+        </div>
+        <div class="stats">
+          <div class="stat">
+            <span class="stat-label">Files</span>
+            <span class="stat-value" id="statFiles">-</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Standards</span>
+            <span class="stat-value" id="statStandards">-</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Rows</span>
+            <span class="stat-value" id="statRows">-</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Columns</span>
+            <span class="stat-value" id="statColumns">-</span>
+          </div>
+        </div>
+
+        <div class="downloads">
+          <div class="downloads-meta">
+            <h3>Download stddf</h3>
+            <p>Export as CSV or TSV with original columns preserved.</p>
+          </div>
+          <div class="downloads-actions">
+            <button id="downloadCsv" class="ghost" disabled>Download CSV</button>
+            <button id="downloadTsv" class="ghost" disabled>Download TSV</button>
+          </div>
+        </div>
+
+        <div class="chart-panel">
+          <div class="chart-head">
+            <div>
+              <h3>Visualization</h3>
+              <p>Grouped bars by standard and file.</p>
+            </div>
+            <label class="field inline">
+              <span>Y axis</span>
+              <select id="ySelect"></select>
+            </label>
+          </div>
+          <div id="chartLegend" class="chart-legend"></div>
+          <div id="chartCanvas" class="chart-canvas"></div>
+        </div>
+
+        <div class="table-panel">
+          <div class="table-head">
+            <h3>stddf preview</h3>
+            <p>Sorted by standard and file order.</p>
+          </div>
+          <div class="table-scroll" id="tableScroll"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

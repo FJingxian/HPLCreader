@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hplcreader"
+version = "0.1.0"
+description = "HPLC standard matching utility with a browser UI."
+readme = "README.md"
+authors = [
+  {name = "jingxianfu"}
+]
+license = {file = "LICENSE"}
+keywords = [
+  "HPLC",
+  "chromatography",
+  "retention-time",
+  "standards",
+  "analysis"
+]
+classifiers = [
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Chemistry"
+]
+requires-python = ">=3.9"
+dependencies = [
+  "pandas>=1.5"
+]
+
+[project.urls]
+Homepage = "https://github.com/FJingxian/HPLCreader"
+Repository = "https://github.com/FJingxian/HPLCreader"
+Issues = "https://github.com/FJingxian/HPLCreader/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
