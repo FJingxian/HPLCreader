@@ -55,4 +55,4 @@ Open `http://localhost:8000`, upload multiple TSV/TXT files and a standard JSON 
 - The signal/area is read from the last column.
 - Standard JSON must be a dictionary: `{"standard_name": retention_time}`.
 - All TSV/TXT files must share identical column headers.
-- File names should follow `sample-replicate.ext` (example: `11-26-1.txt`), where `sample` is the sample ID and `replicate` is the repeat number.
+- The first column should follow `sample-replicate` (example: `11-26-1`), where `sample` is the sample ID and `replicate` is the repeat number.

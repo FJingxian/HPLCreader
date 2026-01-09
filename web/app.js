@@ -42,16 +42,13 @@ function computeChartSize(standards, yLabel) {
   return { height, bottomMargin };
 }
 
-function parseSampleMeta(fileName) {
-  const base = String(fileName).replace(/\.[^.]+$/, '');
-  const parts = base.split('-');
-  if (parts.length < 2) {
+function parseSampleMeta(sampleValue) {
+  const base = String(sampleValue).trim();
+  const match = base.match(/^(.*?)-(\d+)$/);
+  if (!match) {
     return { sampleId: base, replicate: null };
   }
-  const replicateRaw = parts[parts.length - 1];
-  const replicate = Number(replicateRaw);
-  const sampleId = parts.slice(0, -1).join('-');
-  return { sampleId, replicate: Number.isFinite(replicate) ? replicate : null };
+  return { sampleId: match[1], replicate: Number(match[2]) };
 }
 
 function setStatus(message, isError = false) {
@@ -219,6 +216,7 @@ function computeStdDf(filesData, stdDict, rtThr) {
   const baseColumns = filesData[0].columns;
   const columns = ['Standard', 'Sample', 'Replicate', 'File', ...baseColumns];
   const rows = [];
+  const warnings = [];
   const rtIdx = 2;
   const lastIdx = baseColumns.length - 1;
   const maxIter = 200;
@@ -229,24 +227,29 @@ function computeStdDf(filesData, stdDict, rtThr) {
       throw new Error(`Standard "${stdName}" has non-numeric retention time.`);
     }
     for (const fileData of filesData) {
-      const { sampleId, replicate } = parseSampleMeta(fileData.name);
-      const sorted = fileData.rows
-        .slice()
-        .sort((a, b) => getNumeric(a[rtIdx]) - getNumeric(b[rtIdx]));
+      const sampleGroups = new Map();
+      fileData.rows.forEach((row) => {
+        const rawSample = row[0] ?? fileData.name;
+        const sampleKey = String(rawSample).trim() || fileData.name;
+        if (!sampleGroups.has(sampleKey)) {
+          sampleGroups.set(sampleKey, []);
+        }
+        sampleGroups.get(sampleKey).push(row);
+      });
+      for (const [sampleKey, groupRows] of sampleGroups.entries()) {
       let sample = [];
       let iter = 0;
       while (sample.length === 0 && iter < maxIter) {
         const thr = rtThr * (1 + 0.1 * iter);
-        sample = sorted.filter((row) => {
+        sample = groupRows.filter((row) => {
           const rtVal = getNumeric(row[rtIdx]);
           return Number.isFinite(rtVal) && rtVal >= target - thr && rtVal <= target + thr;
         });
         iter += 1;
       }
       if (sample.length === 0) {
-        throw new Error(
-          `No match found for standard "${stdName}" in file "${fileData.name}".`
-        );
+        warnings.push(`No match for "${stdName}" in "${sampleKey}" (${fileData.name})`);
+        continue;
       }
       let bestRow = sample[0];
       let bestVal = getNumeric(sample[0][lastIdx]);
@@ -257,11 +260,13 @@ function computeStdDf(filesData, stdDict, rtThr) {
           bestRow = row;
         }
       }
+      const { sampleId, replicate } = parseSampleMeta(sampleKey);
       rows.push([stdName, sampleId, replicate, fileData.name, ...bestRow]);
+      }
     }
   }
 
-  return { columns, rows };
+  return { columns, rows, warnings };
 }
 
 function buildDelimited(stddf, delimiter) {
@@ -502,7 +507,13 @@ async function handleProcess() {
     resultsEl.hidden = false;
     downloadCsvBtn.disabled = false;
     downloadTsvBtn.disabled = false;
-    setStatus('stddf generated.');
+    const warningCount = state.stddf.warnings ? state.stddf.warnings.length : 0;
+    if (warningCount > 0) {
+      setStatus(`stddf generated with ${warningCount} unmatched sample/standard pairs.`);
+      console.info('Unmatched sample/standard pairs:', state.stddf.warnings);
+    } else {
+      setStatus('stddf generated.');
+    }
   } catch (error) {
     console.error(error);
     setStatus(error.message || 'Processing failed.', true);
