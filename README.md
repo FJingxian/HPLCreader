@@ -4,9 +4,10 @@ HPLC standard matching utility based on the logic in `src/HPLCreader/hplc.py`, w
 
 ## Features
 
-- Parse multiple HPLC TSV exports
+- Parse multiple HPLC TSV/TXT exports
 - Match standards by retention time with adaptive threshold expansion
 - Select the max-signal row per standard per file
+- Merge replicate files by sample ID for charting with error bars
 - Export stddf as CSV/TSV and visualize in the browser
 
 ## Project Layout
@@ -45,12 +46,13 @@ Serve the static UI:
 python -m http.server -d web
 ```
 
-Open `http://localhost:8000`, upload multiple TSV files and a standard JSON file, then click **Generate stddf** to download and visualize.
+Open `http://localhost:8000`, upload multiple TSV/TXT files and a standard JSON file, then click **Generate stddf** to download and visualize.
 
 ## File Format Expectations
 
-- TSV files must include a header row.
+- TSV/TXT files must include a header row.
 - The retention time is read from the third column (index 2).
 - The signal/area is read from the last column.
 - Standard JSON must be a dictionary: `{"standard_name": retention_time}`.
-- All TSV files must share identical column headers.
+- All TSV/TXT files must share identical column headers.
+- File names should follow `sample-replicate.ext` (example: `11-26-1.txt`), where `sample` is the sample ID and `replicate` is the repeat number.

@@ -13,7 +13,6 @@ const downloadTsvBtn = document.getElementById('downloadTsv');
 const tableScroll = document.getElementById('tableScroll');
 const ySelect = document.getElementById('ySelect');
 const chartCanvas = document.getElementById('chartCanvas');
-const chartLegend = document.getElementById('chartLegend');
 
 const palette = [
   '#0f7b6c',
@@ -31,18 +30,73 @@ const state = {
   stdDict: {}
 };
 
+function computeChartSize(standards, yLabel) {
+  const maxLabelLength = standards.reduce((maxLen, label) => {
+    return Math.max(maxLen, String(label).length);
+  }, 0);
+  const labelRows = Math.max(1, Math.ceil(maxLabelLength / 12));
+  const extraBottom = Math.min(120, (labelRows - 1) * 20);
+  const extraForYAxis = Math.min(80, Math.max(0, String(yLabel).length - 8) * 3);
+  const height = Math.min(720, 320 + extraBottom + extraForYAxis);
+  const bottomMargin = 70 + extraBottom;
+  return { height, bottomMargin };
+}
+
+function parseSampleMeta(fileName) {
+  const base = String(fileName).replace(/\.[^.]+$/, '');
+  const parts = base.split('-');
+  if (parts.length < 2) {
+    return { sampleId: base, replicate: null };
+  }
+  const replicateRaw = parts[parts.length - 1];
+  const replicate = Number(replicateRaw);
+  const sampleId = parts.slice(0, -1).join('-');
+  return { sampleId, replicate: Number.isFinite(replicate) ? replicate : null };
+}
+
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
   statusEl.classList.toggle('error', isError);
 }
 
-function readFileAsText(file) {
+function readFileAsArrayBuffer(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
     reader.onerror = () => reject(reader.error);
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   });
+}
+
+function decodeWithEncoding(buffer, encoding, fatal = false) {
+  try {
+    const decoder = new TextDecoder(encoding, fatal ? { fatal: true } : undefined);
+    return decoder.decode(buffer);
+  } catch (error) {
+    return null;
+  }
+}
+
+function decodeArrayBuffer(buffer) {
+  const utf8 = decodeWithEncoding(buffer, 'utf-8', true);
+  if (utf8 !== null) {
+    return { text: utf8, encoding: 'utf-8' };
+  }
+  const gbk = decodeWithEncoding(buffer, 'gbk', true);
+  if (gbk !== null) {
+    return { text: gbk, encoding: 'gbk' };
+  }
+  const fallback = decodeWithEncoding(buffer, 'utf-8');
+  return { text: fallback ?? new TextDecoder().decode(buffer), encoding: 'utf-8' };
+}
+
+async function readFileAsText(file) {
+  const buffer = await readFileAsArrayBuffer(file);
+  const decoded = decodeArrayBuffer(buffer);
+  if (decoded.encoding !== 'utf-8') {
+    console.info(`Decoded ${file.name} as ${decoded.encoding}.`);
+  }
+  return decoded.text;
 }
 
 function cleanCell(value) {
@@ -56,12 +110,77 @@ function cleanCell(value) {
   return trimmed;
 }
 
-function parseTsv(name, text) {
-  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
-  if (lines.length < 2) {
-    throw new Error(`TSV file "${name}" has no data rows.`);
+function countDelimiter(line, delimiter) {
+  let count = 0;
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        i += 1;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (char === delimiter && !inQuotes) {
+      count += 1;
+    }
   }
-  const header = lines[0].split('\t').map((cell, index) => {
+  return count;
+}
+
+function detectDelimiter(line) {
+  const candidates = ['\t', ',', ';', '|'];
+  let best = candidates[0];
+  let bestCount = -1;
+  for (const delimiter of candidates) {
+    const count = countDelimiter(line, delimiter);
+    if (count > bestCount) {
+      best = delimiter;
+      bestCount = count;
+    }
+  }
+  if (bestCount <= 0) {
+    throw new Error('Unable to detect delimiter (tab, comma, semicolon, or pipe).');
+  }
+  return best;
+}
+
+function splitLine(line, delimiter) {
+  const cells = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (char === delimiter && !inQuotes) {
+      cells.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  cells.push(current);
+  return cells;
+}
+
+function parseTsv(name, text) {
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = normalized.split('\n').filter((line) => line.trim() !== '');
+  if (lines.length < 2) {
+    throw new Error(`Input file "${name}" has no data rows.`);
+  }
+  const delimiter = detectDelimiter(lines[0]);
+  const header = splitLine(lines[0], delimiter).map((cell, index) => {
     const cleaned = cleanCell(cell);
     if (index === 0 && typeof cleaned === 'string') {
       return cleaned.replace(/^\uFEFF/, '');
@@ -69,11 +188,11 @@ function parseTsv(name, text) {
     return cleaned;
   });
   const rows = lines.slice(1).map((line) => {
-    const cells = line.split('\t');
+    const cells = splitLine(line, delimiter);
     return header.map((_, idx) => cleanCell(cells[idx] ?? ''));
   });
   if (header.length < 3) {
-    throw new Error(`TSV file "${name}" needs at least 3 columns.`);
+    throw new Error(`Input file "${name}" needs at least 3 columns.`);
   }
   return { name, columns: header, rows };
 }
@@ -98,7 +217,7 @@ function computeStdDf(filesData, stdDict, rtThr) {
     throw new Error('Standard JSON has no keys.');
   }
   const baseColumns = filesData[0].columns;
-  const columns = ['Standard', 'File', ...baseColumns];
+  const columns = ['Standard', 'Sample', 'Replicate', 'File', ...baseColumns];
   const rows = [];
   const rtIdx = 2;
   const lastIdx = baseColumns.length - 1;
@@ -110,6 +229,7 @@ function computeStdDf(filesData, stdDict, rtThr) {
       throw new Error(`Standard "${stdName}" has non-numeric retention time.`);
     }
     for (const fileData of filesData) {
+      const { sampleId, replicate } = parseSampleMeta(fileData.name);
       const sorted = fileData.rows
         .slice()
         .sort((a, b) => getNumeric(a[rtIdx]) - getNumeric(b[rtIdx]));
@@ -137,7 +257,7 @@ function computeStdDf(filesData, stdDict, rtThr) {
           bestRow = row;
         }
       }
-      rows.push([stdName, fileData.name, ...bestRow]);
+      rows.push([stdName, sampleId, replicate, fileData.name, ...bestRow]);
     }
   }
 
@@ -209,7 +329,11 @@ function renderStats(stddf) {
 function detectNumericColumns(stddf) {
   const numericColumns = [];
   stddf.columns.forEach((col, idx) => {
-    if (col === 'Standard' || col === 'File') {
+    if (col === 'Standard' || col === 'Sample' || col === 'Replicate' || col === 'File') {
+      return;
+    }
+    const label = String(col);
+    if (label.includes('%') || label.includes('％')) {
       return;
     }
     const values = stddf.rows.map((row) => row[idx]).filter((val) => val !== '');
@@ -224,81 +348,98 @@ function detectNumericColumns(stddf) {
   return numericColumns;
 }
 
-function renderLegend(files) {
-  chartLegend.innerHTML = '';
-  files.forEach((file, idx) => {
-    const item = document.createElement('div');
-    item.className = 'legend-item';
-    const swatch = document.createElement('span');
-    swatch.className = 'legend-swatch';
-    swatch.style.background = palette[idx % palette.length];
-    const label = document.createElement('span');
-    label.textContent = file;
-    item.appendChild(swatch);
-    item.appendChild(label);
-    chartLegend.appendChild(item);
-  });
+function summarizeValues(values) {
+  if (!values.length) {
+    return { mean: null, std: 0, n: 0 };
+  }
+  const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+  if (values.length === 1) {
+    return { mean, std: 0, n: 1 };
+  }
+  const variance =
+    values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / (values.length - 1);
+  return { mean, std: Math.sqrt(variance), n: values.length };
 }
 
 function renderChart(stddf, yColumn) {
   const standardIdx = stddf.columns.indexOf('Standard');
-  const fileIdx = stddf.columns.indexOf('File');
+  const sampleIdx = stddf.columns.indexOf('Sample');
   const yIdx = stddf.columns.indexOf(yColumn);
   if (yIdx === -1) {
     return;
   }
 
-  const standards = [...new Set(stddf.rows.map((row) => row[standardIdx]))];
-  const files = [...new Set(stddf.rows.map((row) => row[fileIdx]))];
-  renderLegend(files);
+  const standards = [];
+  const samples = [];
+  const groupMap = new Map();
+  stddf.rows.forEach((row) => {
+    const standard = row[standardIdx];
+    const sample = row[sampleIdx];
+    if (!standards.includes(standard)) {
+      standards.push(standard);
+    }
+    if (!samples.includes(sample)) {
+      samples.push(sample);
+    }
+    const value = getNumeric(row[yIdx]);
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    const key = `${standard}||${sample}`;
+    if (!groupMap.has(key)) {
+      groupMap.set(key, []);
+    }
+    groupMap.get(key).push(value);
+  });
+  if (typeof Plotly === 'undefined') {
+    chartCanvas.textContent = 'Plotly failed to load. Check the script tag.';
+    return;
+  }
 
-  const maxVal = Math.max(
-    ...stddf.rows.map((row) => {
-      const value = getNumeric(row[yIdx]);
-      return Number.isFinite(value) ? value : 0;
-    }),
-    1
-  );
-
-  chartCanvas.classList.remove('is-ready');
-  chartCanvas.innerHTML = '';
-
-  standards.forEach((standard) => {
-    const group = document.createElement('div');
-    group.className = 'chart-group';
-    const bars = document.createElement('div');
-    bars.className = 'chart-bars';
-
-    files.forEach((file, idx) => {
-      const match = stddf.rows.find(
-        (row) => row[standardIdx] === standard && row[fileIdx] === file
-      );
-      if (!match) {
-        return;
-      }
-      const value = getNumeric(match[yIdx]);
-      const bar = document.createElement('div');
-      bar.className = 'chart-bar';
-      const barHeight = Number.isFinite(value) ? (value / maxVal) * 100 : 0;
-      bar.style.setProperty('--bar-h', `${barHeight}%`);
-      bar.style.background = palette[idx % palette.length];
-      const label = document.createElement('span');
-      label.textContent = Number.isFinite(value) ? value.toFixed(2) : 'n/a';
-      bar.appendChild(label);
-      bars.appendChild(bar);
+  const { height, bottomMargin } = computeChartSize(standards, yColumn);
+  chartCanvas.style.height = `${height}px`;
+  const traces = samples.map((sample, idx) => {
+    const yValues = [];
+    const errorValues = [];
+    const customData = [];
+    standards.forEach((standard) => {
+      const values = groupMap.get(`${standard}||${sample}`) || [];
+      const summary = summarizeValues(values);
+      yValues.push(summary.mean);
+      errorValues.push(summary.std);
+      customData.push([summary.std, summary.n]);
     });
-
-    const label = document.createElement('div');
-    label.className = 'chart-label';
-    label.textContent = standard;
-
-    group.appendChild(bars);
-    group.appendChild(label);
-    chartCanvas.appendChild(group);
+    return {
+      type: 'bar',
+      name: sample,
+      x: standards,
+      y: yValues,
+      error_y: { type: 'data', array: errorValues, visible: true },
+      marker: { color: palette[idx % palette.length] },
+      customdata: customData,
+      hovertemplate:
+        `Sample: ${sample}<br>` +
+        'Standard: %{x}<br>' +
+        `${yColumn} mean: %{y:.2f}<br>` +
+        'SD: %{customdata[0]:.2f}<br>' +
+        'n: %{customdata[1]}<extra></extra>'
+    };
   });
 
-  requestAnimationFrame(() => {
-    chartCanvas.classList.add('is-ready');
+  const layout = {
+    barmode: 'group',
+    showlegend: false,
+    margin: { t: 24, r: 16, b: bottomMargin, l: 56 },
+    height,
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    xaxis: { title: 'Standard', automargin: true, tickangle: -20 },
+    yaxis: { title: yColumn, rangemode: 'tozero' }
+  };
+
+  const config = { displayModeBar: false, responsive: true };
+  Promise.resolve(Plotly.react(chartCanvas, traces, layout, config)).then(() => {
+    Plotly.Plots.resize(chartCanvas);
   });
 }
 

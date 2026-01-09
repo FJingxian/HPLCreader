@@ -308,13 +308,15 @@ body {
 }
 
 .chart-canvas {
-  display: grid;
-  gap: 14px;
-  padding: 14px 12px 10px;
+  display: block;
+  position: relative;
+  width: 100%;
+  height: auto;
+  min-height: 320px;
+  padding: 12px;
   border-radius: 16px;
   background: rgba(250, 248, 244, 0.85);
   border: 1px solid rgba(27, 25, 20, 0.08);
-  min-height: 240px;
 }
 
 .chart-canvas.is-ready .chart-bar {

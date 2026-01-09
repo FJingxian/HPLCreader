@@ -13,7 +13,7 @@
         <div class="badge">HPLC Reader</div>
         <h1>HPLC Standard Match Explorer</h1>
         <p class="lead">
-          Upload multiple TSV files and a standard JSON. The app builds stddf,
+          Upload multiple TSV/TXT files and a standard JSON. The app builds stddf,
           lets you download it, and visualizes the matched peaks.
         </p>
         <div class="hero-meta">
@@ -26,12 +26,12 @@
       <section class="panel panel-compact" aria-label="Inputs">
         <div class="panel-head">
           <h2>Inputs</h2>
-          <p>Provide the HPLC TSV files and the standard JSON dictionary.</p>
+          <p>Provide the HPLC TSV/TXT files and the standard JSON dictionary.</p>
         </div>
         <div class="panel-grid">
           <label class="field">
-            <span>TSV files (multiple)</span>
-            <input id="tsvFiles" type="file" multiple accept=".tsv,text/tab-separated-values" />
+            <span>TSV/TXT files (multiple)</span>
+            <input id="tsvFiles" type="file" multiple accept=".tsv,.txt,text/tab-separated-values,text/plain" />
           </label>
           <label class="field">
             <span>Standard JSON</span>
@@ -88,14 +88,14 @@
           <div class="chart-head">
             <div>
               <h3>Visualization</h3>
-              <p>Grouped bars by standard and file.</p>
+              <p>Grouped bars by standard and sample (replicates merged with error bars).</p>
             </div>
             <label class="field inline">
               <span>Y axis</span>
               <select id="ySelect"></select>
             </label>
           </div>
-          <div id="chartLegend" class="chart-legend"></div>
+          <div id="chartLegend" class="chart-legend" hidden aria-hidden="true"></div>
           <div id="chartCanvas" class="chart-canvas"></div>
         </div>
 
@@ -109,6 +109,7 @@
       </section>
     </main>
 
+    <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
