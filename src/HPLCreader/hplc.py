@@ -3,8 +3,8 @@ import json
 
 
 files = ['example/standard.tsv','example/standard.tsv']
-with open('example/standard.280.json','r') as f:
-    stddict:dict = json.loads(f.read())
+with open('example/standard.280.json', 'r', encoding='utf-8') as f:
+    stddict: dict = json.load(f)
 rt_thr = 0.1
 dfs = [pd.read_csv(file,sep='\t') for file in files]
 for i in stddict.keys():
